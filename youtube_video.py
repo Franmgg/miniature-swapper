@@ -18,7 +18,7 @@ def get_videos_from_channel(youtube, channel_id):
         order="date"
     )
     response = request.execute()
-    video_ids = []
+    video_ids = []    
     three_weeks_ago = datetime.now() - timedelta(weeks=3)
     for item in response['items']:
         video_id = item['id']['videoId']
@@ -28,46 +28,39 @@ def get_videos_from_channel(youtube, channel_id):
     return video_ids
 
 def get_video_statuses(youtube, channel_id):
-    statuses = {
-        "public": 0,
-        "unlisted": 0,
-        "private": 0,
-        "other": 0
+    request = youtube.search().list(
+        part="snippet",
+        channelId=channel_id,
+        maxResults=50,
+        order="date"
+    )
+    response = request.execute()
+
+    video_statuses = {
+        'public': 0,
+        'unlisted': 0,
+        'private': 0,
+        'other': 0
     }
     total_views = 0
     total_likes = 0
 
-    next_page_token = None
-    while True:
-        request = youtube.search().list(
-            part="id",
-            channelId=channel_id,
-            maxResults=50,
-            type="video",
-            pageToken=next_page_token
-        )
-        response = request.execute()
-
-        video_ids = [item['id']['videoId'] for item in response['items']]
-
-        for video_id in video_ids:
-            request = youtube.videos().list(
+    for item in response['items']:
+        if item['id']['kind'] == 'youtube#video':
+            video_id = item['id']['videoId']
+            video_response = youtube.videos().list(
                 part="status,statistics",
                 id=video_id
-            )
-            response = request.execute()
-            if 'items' in response and response['items']:
-                status = response['items'][0]['status']['privacyStatus']
-                if status in statuses:
-                    statuses[status] += 1
+            ).execute()
+
+            for video in video_response['items']:
+                status = video['status']['privacyStatus']
+                if status in video_statuses:
+                    video_statuses[status] += 1
                 else:
-                    statuses["other"] += 1
+                    video_statuses['other'] += 1
 
-                total_views += int(response['items'][0]['statistics'].get('viewCount', 0))
-                total_likes += int(response['items'][0]['statistics'].get('likeCount', 0))
+                total_views += int(video['statistics'].get('viewCount', 0))
+                total_likes += int(video['statistics'].get('likeCount', 0))
 
-        next_page_token = response.get('nextPageToken')
-        if not next_page_token:
-            break
-
-    return statuses, total_views, total_likes
+    return video_statuses, total_views, total_likes
